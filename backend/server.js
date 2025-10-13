@@ -1,68 +1,75 @@
 import express from "express";
 import cors from "cors";
-import { supabase } from "./supabaseClient.js";
-import dotenv from 'dotenv';
-dotenv.config();
+import dotenv from "dotenv";
+import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
+
+
+dotenv.config({ path: "../.env" }); // 👈 tells Node to load from project root
 
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 🧠 Read from Vite-style env vars
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY;
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
+const PORT = process.env.PORT || 8080;
+
+// 🧩 Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ✅ Route: Match users to tasks using AI service
 app.post("/match", async (req, res) => {
-  const { user_id, task_id } = req.body;
-
-  if (!user_id || !task_id) {
-    return res.status(400).json({ error: "user_id and task_id are required" });
-  }
-
   try {
-    // Fetch user and task from Supabase
-    const { data: userData, error: userError } = await supabase
+    const { user_id, task_id } = req.body;
+
+    if (!user_id || !task_id) {
+      return res.status(400).json({ error: "user_id and task_id are required" });
+    }
+
+    // Fetch user profile
+    const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", user_id)
       .single();
 
+    if (profileError || !profileData) {
+      return res.status(404).json({ error: "User profile not found" });
+    }
+
+    // Fetch task data
     const { data: taskData, error: taskError } = await supabase
       .from("tasks")
       .select("*")
       .eq("id", task_id)
       .single();
 
-    if (userError || taskError || !userData || !taskData) {
-      return res.status(404).json({ error: "User or Task not found" });
+    if (taskError || !taskData) {
+      return res.status(404).json({ error: "Task not found" });
     }
 
-    // Extract relevant info
-    const userText = `${userData.name || ""} ${userData.bio || ""} ${userData.location || ""}`.toLowerCase();
-    const requirements = taskData.requirements || [];
+    // Send both to the AI service
+    const aiResponse = await axios.post(AI_SERVICE_URL, {
+      user: profileData,
+      task: taskData,
+    });
 
-    // Simple matching logic: count requirement words found in user's bio/name
-    let matched = 0;
-    for (const req of requirements) {
-      if (userText.includes(req.toLowerCase())) matched++;
-    }
-
-    const matchScore = requirements.length > 0 ? matched / requirements.length : 0;
-    const comment =
-      matchScore > 0.7
-        ? `Strong match based on ${matched} overlapping skills`
-        : matchScore > 0.3
-        ? `Partial match found (${matched}/${requirements.length})`
-        : `Weak match – few relevant terms`;
-
-    // Return response
-    return res.json({
+    // Forward the AI’s response back
+    res.json({
       user_id,
       task_id,
-      match_score: parseFloat(matchScore.toFixed(2)),
-      comment,
+      match_result: aiResponse.data,
     });
-  } catch (err) {
-    console.error("Error in /match:", err);
-    res.status(500).json({ error: "Internal server error" });
+  } catch (error) {
+    console.error("Error in /match:", error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.listen(5000, () => console.log("✅ Server running on http://localhost:5000"));
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});

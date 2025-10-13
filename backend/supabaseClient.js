@@ -1,8 +1,22 @@
+// backend/supabaseClient.js
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// ✅ Always use import.meta.env for Vite projects
+// Resolve __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env from project root
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// Read Supabase credentials
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-// ✅ Create the Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+
+
+// Create Supabase client
+export const supabase = createClient(supabaseUrl, supabaseKey);
